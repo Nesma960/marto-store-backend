@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 import dns from 'node:dns';
 
 import productsRouter from './routes/products.js';
-import ordersRouter from './routes/Order.js';
+import ordersRouter from './routes/order.js';
 import authRouter from './routes/auth.js';
 
 dotenv.config();
