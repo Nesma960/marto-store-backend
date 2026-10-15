@@ -11,10 +11,9 @@ import authRouter from './routes/auth.js';
 dotenv.config();
 
 // Use the custom DNS resolver only in local development.
-if (!process.env.RENDER) {
+if (!process.env.RENDER && !process.env.VERCEL) {
   dns.setServers(['62.240.110.198']);
 }
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 
