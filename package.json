@@ -9,7 +9,8 @@
     "fix:prices": "node scripts/fix-suggested-selling-prices.js",
     "import:products": "node scripts/import-products.js",
     "set:prices": "node scripts/set-selling-prices.js",
-    "create:admin": "node scripts/create-admin.js"
+    "create:admin": "node scripts/create-admin.js",
+    "start": "node server.js"
   },
   "keywords": [],
   "author": "",
