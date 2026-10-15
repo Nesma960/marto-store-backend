@@ -10,23 +10,58 @@ import authRouter from './routes/auth.js';
 
 dotenv.config();
 
-// Use the custom DNS resolver only in local development.
+// Custom DNS resolver for local development only.
 if (!process.env.RENDER && !process.env.VERCEL) {
   dns.setServers(['62.240.110.198']);
 }
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
-app.use('/api/auth', authRouter);
 
-// API routes
+// Cache the MongoDB connection for serverless requests.
+let connectionPromise;
+
+async function connectToDatabase() {
+  if (mongoose.connection.readyState === 1) {
+    return;
+  }
+
+  if (!process.env.MONGODB_URI) {
+    throw new Error('MONGODB_URI is missing');
+  }
+
+  if (!connectionPromise) {
+    connectionPromise = mongoose.connect(process.env.MONGODB_URI).catch((error) => {
+      connectionPromise = null;
+      throw error;
+    });
+  }
+
+  await connectionPromise;
+}
+
+// Connect to MongoDB before handling API requests.
+app.use(async (req, res, next) => {
+  try {
+    await connectToDatabase();
+    next();
+  } catch (error) {
+    console.error('MongoDB connection failed:', error.message);
+
+    res.status(500).json({
+      success: false,
+      message: 'Database connection failed',
+    });
+  }
+});
+
+app.use('/api/auth', authRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/orders', ordersRouter);
 
-// Health check
 app.get('/', (req, res) => {
   res.json({
     success: true,
@@ -41,24 +76,23 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Start server after connecting to MongoDB
-async function startServer() {
-  try {
-    if (!process.env.MONGODB_URI) {
-      throw new Error('MONGODB_URI is missing from .env');
-    }
+// Vercel uses the exported Express app.
+// Locally, start a regular Express server.
+if (process.env.VERCEL) {
+  // Vercel handles incoming requests.
+} else {
+  connectToDatabase()
+    .then(() => {
+      console.log('MongoDB connected successfully');
 
-    await mongoose.connect(process.env.MONGODB_URI);
-
-    console.log('MongoDB connected successfully');
-
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Server running on port ${PORT}`);
+      app.listen(PORT, '0.0.0.0', () => {
+        console.log(`Server running on port ${PORT}`);
+      });
+    })
+    .catch((error) => {
+      console.error('Server startup failed:', error.message);
+      process.exitCode = 1;
     });
-  } catch (error) {
-    console.error('Server startup failed:', error.message);
-    process.exitCode = 1;
-  }
 }
 
-startServer();
+export default app;
