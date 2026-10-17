@@ -8,6 +8,28 @@ const router = express.Router();
 
 const DELIVERY_FEE = 25;
 
+const UAE_EMIRATES = [
+  'Dubai',
+  'Abu Dhabi',
+  'Sharjah',
+  'Ajman',
+  'Umm Al Quwain',
+  'Ras Al Khaimah',
+  'Fujairah',
+];
+
+function normalizeUaePhone(value) {
+  if (typeof value !== 'string') return '';
+
+  return value.replace(/[\s()-]/g, '');
+}
+
+function isValidUaeMobile(value) {
+  const phone = normalizeUaePhone(value);
+
+  return /^(?:05\d{8}|\+9715\d{8}|009715\d{8}|9715\d{8})$/.test(phone);
+}
+
 router.post('/', async (req, res) => {
   try {
     const { customerName, phone, alternatePhone, email, shippingAddress, notes, items } = req.body;
@@ -15,19 +37,39 @@ router.post('/', async (req, res) => {
     // Validate customer information
     if (
       typeof customerName !== 'string' ||
-      !customerName.trim() ||
+      customerName.trim().length < 2 ||
+      customerName.trim().length > 100 ||
       typeof phone !== 'string' ||
-      !phone.trim()
+      !isValidUaeMobile(phone)
     ) {
       return res.status(400).json({
         success: false,
-        message: 'Customer name and phone are required.',
+        message: 'A valid customer name and UAE mobile number are required.',
       });
     }
 
-    // Validate shipping address
-    const requiredAddressFields = ['country', 'city', 'area', 'street', 'building'];
+    // Validate optional customer information
+    if (
+      (alternatePhone != null &&
+        (typeof alternatePhone !== 'string' ||
+          (alternatePhone.trim() && !isValidUaeMobile(alternatePhone)))) ||
+      (email != null && typeof email !== 'string') ||
+      (notes != null && typeof notes !== 'string')
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid optional customer information.',
+      });
+    }
 
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid email address.',
+      });
+    }
+
+    // Validate UAE shipping address
     if (!shippingAddress || typeof shippingAddress !== 'object' || Array.isArray(shippingAddress)) {
       return res.status(400).json({
         success: false,
@@ -35,24 +77,27 @@ router.post('/', async (req, res) => {
       });
     }
 
-    for (const field of requiredAddressFields) {
-      if (typeof shippingAddress[field] !== 'string' || !shippingAddress[field].trim()) {
-        return res.status(400).json({
-          success: false,
-          message: `${field} is required in the shipping address.`,
-        });
-      }
-    }
+    const country = shippingAddress.country || 'United Arab Emirates';
+    const { emirate, address } = shippingAddress;
 
-    // Validate optional fields
-    if (
-      (alternatePhone != null && typeof alternatePhone !== 'string') ||
-      (email != null && typeof email !== 'string') ||
-      (notes != null && typeof notes !== 'string')
-    ) {
+    if (country !== 'United Arab Emirates') {
       return res.status(400).json({
         success: false,
-        message: 'Invalid optional customer information.',
+        message: 'Shipping is currently available only within the UAE.',
+      });
+    }
+
+    if (!UAE_EMIRATES.includes(emirate)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please select a valid UAE emirate.',
+      });
+    }
+
+    if (typeof address !== 'string' || address.trim().length < 5 || address.trim().length > 500) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please enter a detailed address (5–500 characters).',
       });
     }
 
@@ -89,12 +134,12 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Get actual products and prices from MongoDB
+    // Get trusted product details and prices from MongoDB
     const products = await Product.find({
       _id: { $in: productIds },
       isActive: true,
     })
-      .select('_id name price')
+      .select('_id name price sourceProductId')
       .lean();
 
     if (products.length !== items.length) {
@@ -123,9 +168,17 @@ router.post('/', async (req, res) => {
         });
       }
 
+      if (product.sourceProductId == null || String(product.sourceProductId).trim() === '') {
+        return res.status(400).json({
+          success: false,
+          message: `Product code is missing for ${product.name}.`,
+        });
+      }
+
       orderItems.push({
         product: product._id,
         productName: product.name,
+        productCode: String(product.sourceProductId),
         price: product.price,
         quantity: item.quantity,
       });
@@ -141,19 +194,14 @@ router.post('/', async (req, res) => {
     // Save the order
     const order = await Order.create({
       customerName: customerName.trim(),
-      phone: phone.trim(),
-      alternatePhone: alternatePhone?.trim() || null,
+      phone: normalizeUaePhone(phone),
+      alternatePhone: alternatePhone?.trim() ? normalizeUaePhone(alternatePhone) : null,
       email: email?.trim() || null,
 
       shippingAddress: {
-        country: shippingAddress.country.trim(),
-        city: shippingAddress.city.trim(),
-        area: shippingAddress.area.trim(),
-        street: shippingAddress.street.trim(),
-        building: shippingAddress.building.trim(),
-        floor: shippingAddress.floor?.trim() || '',
-        apartment: shippingAddress.apartment?.trim() || '',
-        landmark: shippingAddress.landmark?.trim() || '',
+        country: 'United Arab Emirates',
+        emirate,
+        address: address.trim(),
       },
 
       notes: notes?.trim() || null,
@@ -187,6 +235,7 @@ router.post('/', async (req, res) => {
     });
   }
 });
+
 // نجيب الطلبات المحفوظة
 router.get('/', authenticateAdmin, async (req, res) => {
   try {

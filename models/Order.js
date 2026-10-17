@@ -1,53 +1,37 @@
 import mongoose from 'mongoose';
 
+const UAE_EMIRATES = [
+  'Dubai',
+  'Abu Dhabi',
+  'Sharjah',
+  'Ajman',
+  'Umm Al Quwain',
+  'Ras Al Khaimah',
+  'Fujairah',
+];
+
 const shippingAddressSchema = new mongoose.Schema(
   {
     country: {
       type: String,
       required: true,
+      default: 'United Arab Emirates',
       trim: true,
+      enum: ['United Arab Emirates'],
     },
 
-    city: {
+    emirate: {
+      type: String,
+      required: true,
+      enum: UAE_EMIRATES,
+    },
+
+    address: {
       type: String,
       required: true,
       trim: true,
-    },
-
-    area: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    street: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    building: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    floor: {
-      type: String,
-      default: '',
-      trim: true,
-    },
-
-    apartment: {
-      type: String,
-      default: '',
-      trim: true,
-    },
-
-    landmark: {
-      type: String,
-      default: '',
-      trim: true,
+      minlength: 5,
+      maxlength: 500,
     },
   },
   { _id: false },
@@ -64,6 +48,12 @@ const orderItemSchema = new mongoose.Schema(
     productName: {
       type: String,
       required: true,
+    },
+
+    productCode: {
+      type: String,
+      required: true,
+      trim: true,
     },
 
     price: {
@@ -87,6 +77,8 @@ const orderSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      minlength: 2,
+      maxlength: 100,
     },
 
     phone: {
@@ -117,6 +109,7 @@ const orderSchema = new mongoose.Schema(
       type: String,
       default: null,
       trim: true,
+      maxlength: 1000,
     },
 
     items: {
@@ -149,6 +142,7 @@ const orderSchema = new mongoose.Schema(
     currency: {
       type: String,
       default: 'AED',
+      enum: ['AED'],
     },
 
     paymentMethod: {
