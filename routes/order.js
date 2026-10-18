@@ -309,6 +309,231 @@ router.patch('/:id/status', authenticateAdmin, async (req, res) => {
   }
 });
 
+/* Update order details */
+router.patch('/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid order ID.',
+      });
+    }
+
+    const allowedFields = [
+      'customerName',
+      'phone',
+      'alternatePhone',
+      'email',
+      'shippingAddress',
+      'notes',
+    ];
+
+    const updates = {};
+
+    for (const field of allowedFields) {
+      if (Object.hasOwn(req.body, field)) {
+        updates[field] = req.body[field];
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No valid fields provided for update.',
+      });
+    }
+
+    if (
+      'customerName' in updates &&
+      (typeof updates.customerName !== 'string' ||
+        updates.customerName.trim().length < 2 ||
+        updates.customerName.trim().length > 100)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Customer name must be between 2 and 100 characters.',
+      });
+    }
+
+    if ('phone' in updates) {
+      if (typeof updates.phone !== 'string' || !isValidUaeMobile(updates.phone)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid UAE mobile number.',
+        });
+      }
+
+      updates.phone = normalizeUaePhone(updates.phone);
+    }
+
+    if ('alternatePhone' in updates) {
+      if (
+        updates.alternatePhone != null &&
+        updates.alternatePhone !== '' &&
+        (typeof updates.alternatePhone !== 'string' || !isValidUaeMobile(updates.alternatePhone))
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid alternate UAE mobile number.',
+        });
+      }
+
+      updates.alternatePhone =
+        typeof updates.alternatePhone === 'string' && updates.alternatePhone.trim()
+          ? normalizeUaePhone(updates.alternatePhone)
+          : null;
+    }
+
+    if ('email' in updates) {
+      if (
+        updates.email != null &&
+        updates.email !== '' &&
+        (typeof updates.email !== 'string' ||
+          !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(updates.email.trim()))
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid email address.',
+        });
+      }
+
+      updates.email =
+        typeof updates.email === 'string' && updates.email.trim() ? updates.email.trim() : null;
+    }
+
+    if ('notes' in updates) {
+      if (updates.notes != null && typeof updates.notes !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid notes.',
+        });
+      }
+
+      updates.notes = updates.notes?.trim() || null;
+    }
+
+    if ('shippingAddress' in updates) {
+      const shippingAddress = updates.shippingAddress;
+
+      if (
+        !shippingAddress ||
+        typeof shippingAddress !== 'object' ||
+        Array.isArray(shippingAddress)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid shipping address.',
+        });
+      }
+
+      const { country, emirate, address } = shippingAddress;
+
+      if (
+        (country != null && country !== 'United Arab Emirates') ||
+        !UAE_EMIRATES.includes(emirate) ||
+        typeof address !== 'string' ||
+        address.trim().length < 5 ||
+        address.trim().length > 500
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide a valid UAE shipping address.',
+        });
+      }
+
+      updates.shippingAddress = {
+        country: 'United Arab Emirates',
+        emirate,
+        address: address.trim(),
+      };
+    }
+
+    const order = await Order.findByIdAndUpdate(
+      id,
+      { $set: updates },
+      { new: true, runValidators: true },
+    );
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found.',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Order updated successfully.',
+      data: order,
+    });
+  } catch (error) {
+    console.error('Update order error:', error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update order.',
+    });
+  }
+});
+
+/* Delete all orders - keep this route before '/:id' */
+router.delete('/all', authenticateAdmin, async (req, res) => {
+  try {
+    const result = await Order.deleteMany({});
+
+    return res.status(200).json({
+      success: true,
+      message: 'All orders deleted successfully.',
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error('Delete all orders error:', error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete all orders.',
+    });
+  }
+});
+
+/* Delete one order */
+router.delete('/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid order ID.',
+      });
+    }
+
+    const order = await Order.findByIdAndDelete(id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found.',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Order deleted successfully.',
+      data: order,
+    });
+  } catch (error) {
+    console.error('Delete order error:', error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete order.',
+    });
+  }
+});
+
 // نجيب طلبًا واحدًا بالـ ID
 
 router.get('/:id', authenticateAdmin, async (req, res) => {
