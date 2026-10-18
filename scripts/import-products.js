@@ -28,26 +28,46 @@ async function importProducts() {
 
     await mongoose.connect(process.env.MONGODB_URI);
 
-    const operations = products.map((product) => ({
-      updateOne: {
-        filter: { sourceProductId: String(product.sourceProductId) },
-        update: {
-          $setOnInsert: {
-            ...product,
+    const operations = products.map((product) => {
+      const suggestedPrice = Number(product.suggestedSellingPrice);
+
+      if (
+        product.suggestedSellingPrice === null ||
+        product.suggestedSellingPrice === undefined ||
+        product.suggestedSellingPrice === '' ||
+        !Number.isFinite(suggestedPrice) ||
+        suggestedPrice < 0
+      ) {
+        throw new Error(`Invalid suggestedSellingPrice for product ${product.sourceProductId}`);
+      }
+
+      const { price, ...productData } = product;
+
+      return {
+        updateOne: {
+          filter: {
             sourceProductId: String(product.sourceProductId),
           },
+          update: {
+            $set: {
+              price: suggestedPrice,
+            },
+            $setOnInsert: {
+              ...productData,
+              sourceProductId: String(product.sourceProductId),
+            },
+          },
+          upsert: true,
         },
-        upsert: true,
-      },
-    }));
-
+      };
+    });
     const result = await Product.bulkWrite(operations, { ordered: true });
 
-    console.log('Product import finished safely.');
-    console.log(`Products in file: ${products.length}`);
+    console.log('Product import finished successfully.');
+    console.log(`Products processed: ${products.length}`);
     console.log(`New products inserted: ${result.upsertedCount}`);
-    console.log('Existing products were not overwritten or deleted.');
-    console.log('Store selling price (price) is left unset until you choose it.');
+    console.log(`Existing products updated: ${result.matchedCount}`);
+    console.log('Selling prices updated from suggestedSellingPrice.');
   } catch (error) {
     console.error('Product import failed:', error.message);
     process.exitCode = 1;

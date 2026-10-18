@@ -18,7 +18,9 @@ router.get('/', async (req, res) => {
 
     const [products, total] = await Promise.all([
       Product.find(filter)
-        .select('-__v')
+        .select(
+          'sourceProductId name price imageUrl description category stock createdAt updatedAt',
+        )
         .sort({ createdAt: -1, name: 1 })
         .skip((page - 1) * limit)
         .limit(limit)
@@ -49,7 +51,9 @@ router.get('/:id', async (req, res) => {
     const filter = /^[a-f\d]{24}$/i.test(id)
       ? { _id: id, isActive: true }
       : { sourceProductId: id, isActive: true };
-    const product = await Product.findOne(filter).select('-__v').lean();
+    const product = await Product.findOne(filter)
+      .select('sourceProductId name price imageUrl description category stock createdAt updatedAt')
+      .lean();
 
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found.' });
