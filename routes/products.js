@@ -7,28 +7,36 @@ const router = Router();
 router.get('/', async (req, res) => {
   try {
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+
     const requestedLimit = Number.parseInt(req.query.limit, 10) || 12;
+
     const limit = Math.min(Math.max(requestedLimit, 1), 100);
+
     const search = String(req.query.search || '').trim();
 
     const filter = { isActive: true };
+
     if (search) {
-      filter.name = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+      const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      filter.name = {
+        $regex: escapedSearch,
+        $options: 'i',
+      };
     }
 
     const [products, total] = await Promise.all([
       Product.find(filter)
-        .select(
-          'sourceProductId name price imageUrl description category stock createdAt updatedAt',
-        )
+        .select('sourceProductId name price imageUrl category stock createdAt updatedAt')
         .sort({ createdAt: -1, name: 1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean(),
+
       Product.countDocuments(filter),
     ]);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: products,
       pagination: {
@@ -40,28 +48,47 @@ router.get('/', async (req, res) => {
     });
   } catch (error) {
     console.error('Get products error:', error.message);
-    res.status(500).json({ success: false, message: 'Could not load products.' });
+
+    return res.status(500).json({
+      success: false,
+      message: 'Could not load products.',
+    });
   }
 });
 
 // GET /api/products/:id
 router.get('/:id', async (req, res) => {
   try {
-    const id = req.params.id;
+    const { id } = req.params;
+
     const filter = /^[a-f\d]{24}$/i.test(id)
       ? { _id: id, isActive: true }
       : { sourceProductId: id, isActive: true };
+
     const product = await Product.findOne(filter)
-      .select('sourceProductId name price imageUrl description category stock createdAt updatedAt')
+      .select(
+        'sourceProductId name price imageUrl images description features keywords sku category stock createdAt updatedAt',
+      )
       .lean();
 
     if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found.' });
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found.',
+      });
     }
-    return res.status(200).json({ success: true, data: product });
+
+    return res.status(200).json({
+      success: true,
+      data: product,
+    });
   } catch (error) {
     console.error('Get product error:', error.message);
-    return res.status(500).json({ success: false, message: 'Could not load product.' });
+
+    return res.status(500).json({
+      success: false,
+      message: 'Could not load product.',
+    });
   }
 });
 
