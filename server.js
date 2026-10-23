@@ -7,12 +7,11 @@ import dns from 'node:dns';
 import productsRouter from './routes/products.js';
 import ordersRouter from './routes/order.js';
 import authRouter from './routes/auth.js';
-
+import categoriesRouter from './routes/categories.js';
 dotenv.config();
 
-// Custom DNS resolver for local development only.
 if (!process.env.RENDER && !process.env.VERCEL) {
-  dns.setServers(['62.240.110.198']);
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
 }
 
 const app = express();
@@ -60,6 +59,7 @@ app.use(async (req, res, next) => {
 
 app.use('/api/auth', authRouter);
 app.use('/api/products', productsRouter);
+app.use('/api/categories', categoriesRouter);
 app.use('/api/orders', ordersRouter);
 
 app.get('/', (req, res) => {
